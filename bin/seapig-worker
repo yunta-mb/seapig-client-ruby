@@ -1,0 +1,51 @@
+#!/bin/env ruby
+
+require 'seapig-client'
+require 'slop'
+
+STDOUT.sync = true
+
+
+OPTIONS = Slop.parse { |o|
+	o.string '-c', '--connect', "Seapig server address (default: ws://127.0.0.1:3001)", default: "ws://127.0.0.1:3001"
+	o.on '-h', '--help' do puts o; exit end
+}
+
+
+class Producer
+
+	class << self
+		attr_reader :patterns
+	end
+
+	def self.all
+		@producers ||= ObjectSpace.each_object(Class).select { |klass| klass < Producer }
+	end
+
+end
+
+($LOAD_PATH+['./lib']).each { |load_path|
+	Dir[load_path+'/seapigs/*.rb'].each { |f| require f }
+}
+
+
+
+
+EM.run {
+
+	client = SeapigClient.new(OPTIONS["connect"], name: 'worker')
+
+	Producer.all.each { |producer|
+		producer.patterns.each { |pattern|
+			object = client.master(pattern)
+			object.onproduce { |child|
+				start = Time.new
+				print 'Sent  %-30s  '%[child.id]
+				data, version = producer.produce(child.id)
+				child.set(object: data, version: version)
+				puts 'in %5.2fs - %s'%[(Time.new-start).to_f,version.inspect]
+			}
+		}
+	}
+
+}

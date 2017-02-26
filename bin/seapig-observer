@@ -1,0 +1,27 @@
+#!/bin/env ruby
+
+require 'seapig-client'
+require 'slop'
+require 'pp'
+
+
+OPTIONS = Slop.parse { |o|
+	o.string '-c', '--connect', "Seapig server address (default: ws://127.0.0.1:3001)", default: "ws://127.0.0.1:3001"
+	o.on '-h', '--help' do puts o; exit end
+}
+
+EM.run {
+
+	SeapigClient.new(OPTIONS["connect"],name: 'observer').slave(OPTIONS.arguments[0]).onchange { |what|
+		puts "-"*80 + " " + Time.new.to_s
+		puts what.id
+		if what.destroyed
+			puts "DESTROYED"
+		else
+			puts what.version
+			pp what
+		end
+		puts
+	}
+
+}
