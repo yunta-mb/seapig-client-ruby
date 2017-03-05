@@ -7,12 +7,13 @@ require 'pp'
 
 OPTIONS = Slop.parse { |o|
 	o.string '-c', '--connect', "Seapig server address (default: ws://127.0.0.1:3001)", default: "ws://127.0.0.1:3001"
+	o.bool '-d', '--debug', 'Show debug messages'
 	o.on '-h', '--help' do puts o; exit end
 }
 
 EM.run {
 
-	SeapigClient.new(OPTIONS["connect"],name: 'observer').slave(OPTIONS.arguments[0]).onchange { |what|
+	SeapigClient.new(OPTIONS["connect"], name: 'observer', debug: OPTIONS.debug?).slave(OPTIONS.arguments[0]).onstatuschange { |what|
 		puts "-"*80 + " " + Time.new.to_s
 		puts what.id
 		if what.destroyed

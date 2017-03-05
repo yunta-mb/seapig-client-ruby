@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
   s.version     = Seapig::VERSION
   s.authors     = ["yunta"]
   s.email       = ["maciej.blomberg@mikoton.com"]
-  s.homepage    = "https://github.com/yunta-mb/seapig-client"
+  s.homepage    = "https://github.com/yunta-mb/seapig-client-ruby"
   s.summary     = "Transient object synchronization lib - client"
   s.description = "meh"
   s.license     = "MIT"

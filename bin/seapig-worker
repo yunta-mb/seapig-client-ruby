@@ -8,6 +8,7 @@ STDOUT.sync = true
 
 OPTIONS = Slop.parse { |o|
 	o.string '-c', '--connect', "Seapig server address (default: ws://127.0.0.1:3001)", default: "ws://127.0.0.1:3001"
+	o.bool '-d', '--debug', 'Show debug messages'
 	o.on '-h', '--help' do puts o; exit end
 }
 
@@ -33,7 +34,7 @@ end
 
 EM.run {
 
-	client = SeapigClient.new(OPTIONS["connect"], name: 'worker')
+	client = SeapigClient.new(OPTIONS["connect"], name: 'worker', debug: OPTIONS.debug?)
 
 	Producer.all.each { |producer|
 		producer.patterns.each { |pattern|

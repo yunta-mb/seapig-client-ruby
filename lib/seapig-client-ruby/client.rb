@@ -68,6 +68,7 @@ class SeapigClient
 			}
 			@master_objects.each_pair { |id, object|
 				@socket.send JSON.dump(action: 'object-producer-register', pattern: id, :"version-known" => object.version)
+				object.children.each { |child_id, child| child.upload(0, {}, child.version, true) } if id.include?('*')
 			}
 			@last_communication_at = Time.new.to_f
 		}
@@ -100,17 +101,17 @@ class SeapigClient
 				}
 			when 'object-destroy'
 				@slave_objects.each_pair { |id, object|
-					object.destroy(message) if object.matches(message['id'])
+					object.destroy(message['id']) if object.matches(message['id'])
 				}
 				@master_objects.each_pair { |id, object|
-					object.destroy(message) if object.matches(message['id'])
+					object.destroy(message['id']) if object.matches(message['id'])
 				}
 			when 'object-produce'
 				handler = @master_objects.values.find { |object| object.matches(message['id']) }
 				puts 'Seapig server submitted invalid "produce" request: '+message.inspect if (not handler) and @options[:debug]
 				handler.produce(message['id'],message['version-inferred']) if handler
 			else
-				raise 'Seapig server submitted an unsupported message: '+message.inspect
+				raise 'Seapig server submitted an unsupported message: '+message.inspect if @options[:debug]
 			end
 			@last_communication_at = Time.new.to_f
 		}
@@ -133,7 +134,7 @@ class SeapigClient
 			@reconnection_timer = nil
 		end
 		if @socket
-			if detach_fd
+			if detach_fd #FIXME: this is, most likely, broken
 				IO.new(@socket.detach).close
 				@socket.onclose {}
 				@socket_onclose.call("fd detach", "fd detach")
@@ -146,7 +147,7 @@ class SeapigClient
 	end
 
 
-	def detach_fd
+	def detach_fd #FIXME: this is, most likely, broken
 		disconnect(true)
 	end
 
@@ -350,11 +351,10 @@ class SeapigMasterObject < SeapigObject
 		end
 	end
 
-private
 
 	def upload(version_old, data_old, version_new, data_new)
 		if @client.connected
-			if version_old == 0 or data_new == false
+			if version_old == 0 or data_new == false or data_new == true
 				@client.socket.send JSON.dump(id: @id, action: 'object-patch', :"version-new" => version_new, value: data_new)
 			else
 				diff = JsonDiff.generate(data_old, data_new)
@@ -377,7 +377,7 @@ class SeapigWildcardSlaveObject < SeapigSlaveObject
 
 
 	def patch(message)
-		self[message['id']] ||= SeapigSlaveObject.new(@client, message['id'],{}).onchange(&@onchange_proc)
+		self[message['id']] ||= SeapigSlaveObject.new(@client, message['id'],{}).onchange(&@onchange_proc).onstatuschange(&@onstatuschange_proc).ondestroy(&@ondestroy_proc)
 		self[message['id']].patch(message)
 	end
 
@@ -393,16 +393,17 @@ end
 
 class SeapigWildcardMasterObject < SeapigMasterObject
 
+	attr_reader :children
+
 	def initialize(client, id, options)
 		super(client, id, options)
-		@children = ObjectSpace::WeakMap.new
+		@children = {}
 		@options = options
 	end
 
 
 	def [](id)
-		key = @children.keys.find { |key| key == id }
-		@children[(key or id)] ||= SeapigMasterObject.new(@client, id, @options)
+		@children[id] ||= SeapigMasterObject.new(@client, id, @options).ondestroy(&@ondestroy_proc)
 	end
 
 
@@ -416,9 +417,8 @@ class SeapigWildcardMasterObject < SeapigMasterObject
 	end
 
 
-	def destroy(message)
-		key = @children.keys.find { |key| key == id }
-		return if not (key and destroyed = @children[key])
+	def destroy(id)
+		return if not (destroyed = @children.delete(id))
 		destroyed.destroy(id)
 	end
 
